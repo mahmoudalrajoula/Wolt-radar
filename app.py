@@ -1,7 +1,6 @@
 import streamlit as st
-import requests
+import cloudscraper
 import pandas as pd
-import random
 
 st.set_page_config(page_title="Wolt Shift Radar", layout="wide", initial_sidebar_state="collapsed")
 
@@ -14,37 +13,26 @@ with col_lat:
 with col_lon:
     lon = st.number_input("Longitude", value=10.2107, format="%.4f")
 
-@st.cache_data(ttl=60)  # Cache for 60s to respect rate limits
+@st.cache_data(ttl=30)
 def fetch_wolt_data(lat, lon):
     target_url = f"https://consumer-api.wolt.com/v1/pages/restaurants?lat={lat}&lon={lon}"
     
-    # Modern Chrome/Android Browser Headers to mimic authentic requests
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9,da;q=0.8",
-        "Origin": "https://wolt.com",
-        "Referer": "https://wolt.com/"
-    }
-
-    # Attempt 1: Direct Request
+    # Cloudscraper handles anti-bot challenges and browser spoofing natively
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'android',
+            'desktop': False
+        }
+    )
+    
     try:
-        response = requests.get(target_url, headers=headers, timeout=8)
+        response = scraper.get(target_url, timeout=12)
         if response.status_code == 200:
             return response.json(), None
-    except Exception:
-        pass
-
-    # Attempt 2: Fallback via AllOrigins Raw gateway if Cloud IP is 429'd
-    try:
-        proxy_url = f"https://api.allorigins.win/raw?url={requests.utils.quote(target_url)}"
-        response = requests.get(proxy_url, timeout=10)
-        if response.status_code == 200:
-            return response.json(), None
+        return None, f"Wolt Server Returned HTTP {response.status_code}"
     except Exception as e:
         return None, str(e)
-
-    return None, "HTTP 429 Rate Limited by Wolt. Wait 2–3 minutes before refreshing."
 
 if st.button("🔄 Refresh Radar Data", use_container_width=True):
     st.cache_data.clear()
